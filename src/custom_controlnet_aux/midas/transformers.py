@@ -1,6 +1,7 @@
 """
 MiDaS implementation using HuggingFace transformers for PyTorch 2.7 compatibility.
 """
+import os
 import numpy as np
 import torch
 import cv2
@@ -8,40 +9,55 @@ from PIL import Image
 from typing import Union
 
 # Import utilities
-from ..util import HWC3, common_input_validate, resize_image_with_pad
+from ..util import HWC3, common_input_validate, resize_image_with_pad, annotator_ckpts_path
+
+
+def _get_local_model_path(hf_repo):
+    """Check if model exists locally and return local path, otherwise return HF repo name."""
+    if annotator_ckpts_path:
+        local_model_path = os.path.join(annotator_ckpts_path, hf_repo)
+        # Check for config.json (required for HuggingFace transformers)
+        if os.path.isdir(local_model_path) and os.path.exists(os.path.join(local_model_path, "config.json")):
+            print(f"Loading MiDaS from local path: {local_model_path}")
+            return local_model_path
+    return hf_repo
 
 
 class MidasDetector:
-    
+
     def __init__(self, model_name="Intel/dpt-large"):
         from transformers import DPTForDepthEstimation, DPTImageProcessor
-        
+
         self.model_name = model_name
-        self.processor = DPTImageProcessor.from_pretrained(model_name)
-        self.model = DPTForDepthEstimation.from_pretrained(model_name)
+        # Always check for local model first
+        local_model_path = _get_local_model_path(model_name)
+        self.processor = DPTImageProcessor.from_pretrained(local_model_path)
+        self.model = DPTForDepthEstimation.from_pretrained(local_model_path)
         self.device = "cpu"
 
-    @classmethod  
+    @classmethod
     def from_pretrained(cls, pretrained_model_or_path=None, model_type="dpt_hybrid", filename="dpt_hybrid-midas-501f0c75.pt"):
         # Map legacy model types to HuggingFace models
         model_mapping = {
             "dpt_large": "Intel/dpt-large",
-            "dpt_hybrid": "Intel/dpt-hybrid-midas", 
+            "dpt_hybrid": "Intel/dpt-hybrid-midas",
             "midas_v21": "Intel/dpt-large",
             "midas_v21_small": "Intel/dpt-large"
         }
-        
+
         # Use filename for model selection if provided
         if filename and isinstance(filename, str):
             if "dpt_large" in filename.lower():
-                model_name = "Intel/dpt-large"
+                hf_repo = "Intel/dpt-large"
             elif "dpt_hybrid" in filename.lower():
-                model_name = "Intel/dpt-hybrid-midas"
+                hf_repo = "Intel/dpt-hybrid-midas"
             else:
-                model_name = model_mapping.get(model_type, "Intel/dpt-large")
+                hf_repo = model_mapping.get(model_type, "Intel/dpt-large")
         else:
-            model_name = model_mapping.get(model_type, "Intel/dpt-large")
-        
+            hf_repo = model_mapping.get(model_type, "Intel/dpt-large")
+
+        # Check for local model first
+        model_name = _get_local_model_path(hf_repo)
         return cls(model_name)
 
     def to(self, device):

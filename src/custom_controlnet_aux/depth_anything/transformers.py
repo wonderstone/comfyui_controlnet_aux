@@ -3,34 +3,47 @@ Modern DepthAnything implementation using HuggingFace transformers.
 Replaces legacy torch.hub.load DINOv2 backbone with transformers pipeline.
 """
 
+import os
 import numpy as np
 import torch
 from PIL import Image
 from transformers import pipeline
 
-from custom_controlnet_aux.util import HWC3, common_input_validate, resize_image_with_pad
+from custom_controlnet_aux.util import HWC3, common_input_validate, resize_image_with_pad, annotator_ckpts_path
+
+def _get_local_depth_anything_path(model_name):
+    """Check if DepthAnything model exists locally."""
+    if annotator_ckpts_path:
+        local_model_path = os.path.join(annotator_ckpts_path, model_name)
+        if os.path.isdir(local_model_path) and os.path.exists(os.path.join(local_model_path, "config.json")):
+            print(f"Loading DepthAnything from local path: {local_model_path}")
+            return local_model_path
+    return model_name
+
 
 class DepthAnythingDetector:
     """DepthAnything depth estimation using HuggingFace transformers."""
-    
+
     def __init__(self, model_name="LiheYoung/depth-anything-large-hf"):
         """Initialize DepthAnything with specified model."""
-        self.pipe = pipeline(task="depth-estimation", model=model_name)
+        # Always check for local model first
+        local_model_path = _get_local_depth_anything_path(model_name)
+        self.pipe = pipeline(task="depth-estimation", model=local_model_path)
         self.device = "cpu"
 
-    @classmethod  
+    @classmethod
     def from_pretrained(cls, pretrained_model_or_path=None, filename="depth_anything_vitl14.pth"):
         """Create DepthAnything from pretrained model, mapping legacy names to HuggingFace models."""
-        
+
         # Map legacy checkpoint names to modern HuggingFace models
         model_mapping = {
             "depth_anything_vitl14.pth": "LiheYoung/depth-anything-large-hf",
-            "depth_anything_vitb14.pth": "LiheYoung/depth-anything-base-hf", 
+            "depth_anything_vitb14.pth": "LiheYoung/depth-anything-base-hf",
             "depth_anything_vits14.pth": "LiheYoung/depth-anything-small-hf"
         }
-        
-        model_name = model_mapping.get(filename, "LiheYoung/depth-anything-large-hf")
-        return cls(model_name=model_name)
+
+        hf_repo = model_mapping.get(filename, "LiheYoung/depth-anything-large-hf")
+        return cls(model_name=hf_repo)
     
     def to(self, device):
         """Move model to specified device."""

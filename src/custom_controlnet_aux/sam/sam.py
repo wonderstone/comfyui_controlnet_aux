@@ -5,19 +5,39 @@ import numpy as np
 import torch
 from PIL import Image
 from typing import Union
+import os
 
 # Import utilities
-from ..util import HWC3, common_input_validate, resize_image_with_pad
+from ..util import HWC3, common_input_validate, resize_image_with_pad, annotator_ckpts_path
+
+
+def get_local_sam_path(model_name):
+    """Get local path for SAM model if available."""
+    # Map HuggingFace model names to local paths
+    model_mapping = {
+        "facebook/sam-vit-base": os.path.join(annotator_ckpts_path, "facebook", "sam-vit-base"),
+        "facebook/sam-vit-large": os.path.join(annotator_ckpts_path, "facebook", "sam-vit-large"),
+        "facebook/sam-vit-huge": os.path.join(annotator_ckpts_path, "facebook", "sam-vit-huge"),
+    }
+    local_path = model_mapping.get(model_name)
+    if local_path and os.path.exists(local_path):
+        # Check if model files exist
+        if os.path.exists(os.path.join(local_path, "model.safetensors")) or os.path.exists(os.path.join(local_path, "pytorch_model.bin")):
+            print(f"Loading SAM from local path: {local_path}")
+            return local_path
+    return model_name  # Fall back to HuggingFace download
 
 
 class SamDetector:
-    
+
     def __init__(self, model_name="facebook/sam-vit-base"):
         from transformers import SamModel, SamProcessor
-        
+
         self.model_name = model_name
-        self.processor = SamProcessor.from_pretrained(model_name)
-        self.model = SamModel.from_pretrained(model_name)
+        # Try to use local path first
+        local_path = get_local_sam_path(model_name)
+        self.processor = SamProcessor.from_pretrained(local_path)
+        self.model = SamModel.from_pretrained(local_path)
         self.device = "cpu"
 
     @classmethod  

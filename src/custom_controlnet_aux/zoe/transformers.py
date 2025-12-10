@@ -3,10 +3,13 @@ ZoeDepth implementation using HuggingFace transformers.
 Uses official Intel models for depth estimation.
 """
 
+import os
 import numpy as np
 import torch
 from PIL import Image
 from transformers import pipeline, AutoImageProcessor, ZoeDepthForDepthEstimation
+
+from custom_controlnet_aux.util import annotator_ckpts_path
 
 # Local utility functions
 def HWC3(x):
@@ -87,15 +90,28 @@ def common_input_validate(input_image, output_type, **kwargs):
     return (input_image, output_type)
 
 
+def _get_local_model_path(hf_repo):
+    """Check if model exists locally and return local path, otherwise return HF repo name."""
+    if annotator_ckpts_path:
+        local_model_path = os.path.join(annotator_ckpts_path, hf_repo)
+        # Check for config.json (required for HuggingFace transformers)
+        if os.path.isdir(local_model_path) and os.path.exists(os.path.join(local_model_path, "config.json")):
+            print(f"Loading ZoeDepth from local path: {local_model_path}")
+            return local_model_path
+    return hf_repo
+
+
 class ZoeDetector:
     """ZoeDepth depth estimation using HuggingFace transformers."""
-    
+
     def __init__(self, model_name="Intel/zoedepth-nyu-kitti"):
         """Initialize ZoeDepth with specified model."""
-        self.pipe = pipeline(task="depth-estimation", model=model_name)
+        # Always check for local model first
+        local_model_path = _get_local_model_path(model_name)
+        self.pipe = pipeline(task="depth-estimation", model=local_model_path)
         self.device = "cpu"
 
-    @classmethod  
+    @classmethod
     def from_pretrained(cls, pretrained_model_or_path="Intel/zoedepth-nyu-kitti", filename=None, **kwargs):
         """Create ZoeDetector from pretrained model."""
         return cls(model_name=pretrained_model_or_path)
@@ -143,16 +159,18 @@ class ZoeDetector:
 
 class ZoeDepthAnythingDetector:
     """ZoeDepthAnything implementation using HuggingFace transformers."""
-    
+
     def __init__(self, model_name="Intel/zoedepth-nyu-kitti"):
         """Initialize ZoeDepthAnything detector."""
         self.pipe = pipeline(task="depth-estimation", model=model_name)
         self.device = "cpu"
 
-    @classmethod  
+    @classmethod
     def from_pretrained(cls, pretrained_model_or_path="Intel/zoedepth-nyu-kitti", filename=None, **kwargs):
         """Create from pretrained model."""
-        return cls(model_name=pretrained_model_or_path)
+        # Check for local model first
+        model_name = _get_local_model_path(pretrained_model_or_path)
+        return cls(model_name=model_name)
     
     def to(self, device):
         """Move model to specified device."""

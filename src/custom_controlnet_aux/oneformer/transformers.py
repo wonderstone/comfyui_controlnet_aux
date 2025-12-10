@@ -6,28 +6,43 @@ import numpy as np
 import cv2
 import torch
 from PIL import Image
+import os
 
 # Import utilities
-from ..util import HWC3, common_input_validate, resize_image_with_pad, custom_hf_download, HF_MODEL_NAME
+from ..util import HWC3, common_input_validate, resize_image_with_pad, custom_hf_download, HF_MODEL_NAME, annotator_ckpts_path
+
+
+def get_local_oneformer_path(model_name):
+    """Get local path for OneFormer model if available."""
+    model_mapping = {
+        "shi-labs/oneformer_ade20k_swin_large": os.path.join(annotator_ckpts_path, "shi-labs", "oneformer_ade20k_swin_large"),
+        "shi-labs/oneformer_coco_swin_large": os.path.join(annotator_ckpts_path, "shi-labs", "oneformer_coco_swin_large"),
+    }
+    local_path = model_mapping.get(model_name)
+    if local_path and os.path.exists(local_path) and os.path.exists(os.path.join(local_path, "config.json")):
+        print(f"Loading OneFormer from local path: {local_path}")
+        return local_path
+    return model_name
 
 
 class OneformerSegmentor:
     """
     OneFormer segmentation using HuggingFace transformers implementation.
-    
+
     Uses equivalent models that are PyTorch 2.7 compatible and actively maintained:
     - Same architecture (OneFormer with Swin-Large backbone)
     - Same training datasets (COCO panoptic / ADE20K)
     - Professional colorized visualization output
     """
-    
+
     def __init__(self, model_name):
         """Initialize OneFormer with HuggingFace transformers implementation."""
         from transformers import OneFormerProcessor, OneFormerForUniversalSegmentation
-        
+
         self.model_name = model_name
-        self.processor = OneFormerProcessor.from_pretrained(model_name)
-        self.model = OneFormerForUniversalSegmentation.from_pretrained(model_name)
+        local_path = get_local_oneformer_path(model_name)
+        self.processor = OneFormerProcessor.from_pretrained(local_path)
+        self.model = OneFormerForUniversalSegmentation.from_pretrained(local_path)
         self.device = "cpu"
 
     @classmethod  
